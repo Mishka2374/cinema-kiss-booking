@@ -9,4 +9,9 @@ public interface SessionRepository extends JpaRepository<Session, Long> {
     List<Session> findByMovieId(Long movieId);
     boolean existsByHallIdAndStartTimeLessThanAndEndTimeGreaterThan(
             Long hallId, LocalDateTime endTime, LocalDateTime startTime);
+    List<Session> findByStartTimeBetweenOrderByStartTimeAsc(
+            LocalDateTime start, LocalDateTime end
+    );
+    boolean existsByHallId(Long hallId);
+    boolean existsByMovieId(Long movieId);
 }

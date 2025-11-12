@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import ru.kisscinema.booking.movie.dto.MovieDto;
 import ru.kisscinema.booking.movie.service.MovieService;
@@ -22,35 +23,50 @@ public class MovieController {
     private final MovieService movieService;
 
     /**
+     * GET /api/movies
      * Получить список всех фильмов.
      */
     @GetMapping
     public List<MovieDto> getAll() {
-        log.info("Получение списка всех фильмов...");
+        log.info("Получение списка фильмов...");
         List<MovieDto> movies = movieService.getAllMovies();
-        log.info("Список фильмов успешно получен. Количество: {}", movies.size());
+        log.info("Фильмы получены. Количество: {}", movies.size());
         return movies;
     }
 
     /**
-     * Получить информацию о фильме по ID.
+     * GET /api/movies/{id}
+     * Получить фильм по ID.
      */
     @GetMapping("/{id}")
     public MovieDto get(@PathVariable Long id) {
-        log.info("Получение фильма с ID: {}", id);
+        log.info("Получение фильма ID: {}", id);
         MovieDto movie = movieService.getMovieById(id);
-        log.info("Фильм с ID {} успешно получен", id);
+        log.info("Фильм ID {} получен", id);
         return movie;
     }
 
     /**
+     * POST /api/movies
      * Добавить новый фильм.
      */
     @PostMapping
     public MovieDto create(@Valid @RequestBody MovieDto dto) {
-        log.info("Создание нового фильма: {}", dto.title());
+        log.info("Создание фильма: {}", dto.title());
         MovieDto saved = movieService.createMovie(dto);
-        log.info("Фильм '{}' успешно создан с ID {}", saved.title(), saved.id());
+        log.info("Фильм '{}' создан с ID {}", dto.title(), saved.id());
         return saved;
+    }
+
+    /**
+     * DELETE /api/movies/{id}
+     * Удалить фильм (только если нет сеансов).
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteMovie(@PathVariable Long id) {
+        log.info("Удаление фильма с ID: {}", id);
+        movieService.deleteMovie(id);
+        log.info("Фильм с ID {} успешно удалён", id);
+        return ResponseEntity.noContent().build();
     }
 }

@@ -8,7 +8,8 @@ import ru.kisscinema.booking.hall.model.Seat;
 
 @Entity
 @Table(name = "booking", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"seat_id", "session_id"})
+        @UniqueConstraint(columnNames = {"seat_id", "session_id"}),
+        @UniqueConstraint(columnNames = "booking_code")
 })
 @Getter
 @Setter
@@ -22,9 +23,10 @@ public class Booking extends BaseAuditableEntity {
     @JoinColumn(name = "seat_id", nullable = false)
     private Seat seat;
 
+    @Column(name = "booking_code", nullable = false, unique = true)
+    private String bookingCode;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private BookingStatus status = BookingStatus.RESERVED;
-
-    private Long chatId;
 }

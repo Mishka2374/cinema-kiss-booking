@@ -4,11 +4,14 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import ru.kisscinema.booking.session.dto.SessionDto;
 import ru.kisscinema.booking.session.model.Session;
 import ru.kisscinema.booking.session.service.SessionService;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -23,40 +26,63 @@ public class SessionController {
     private final SessionService sessionService;
 
     /**
-     * Получить список всех сеансов.
+     * GET /api/sessions
+     * Получить список всех сеансов (опционально — по фильму через movieId).
      */
     @GetMapping
     public List<Session> getAll(@RequestParam(required = false) Long movieId) {
-        if (movieId != null) {
-            log.info("Получение сеансов для фильма с ID: {}", movieId);
-        } else {
-            log.info("Получение списка всех сеансов...");
-        }
+        log.info("Получение сеансов (movieId={})...", movieId);
         List<Session> sessions = sessionService.getAllSessions(movieId);
-        log.info("Список сеансов успешно получен. Количество: {}", sessions.size());
+        log.info("Сеансы получены. Количество: {}", sessions.size());
         return sessions;
     }
 
     /**
-     * Получить информацию о сеансе по ID.
+     * GET /api/sessions/{id}
+     * Получить сеанс по ID.
      */
     @GetMapping("/{id}")
     public Session get(@PathVariable Long id) {
-        log.info("Получение сеанса с ID: {}", id);
+        log.info("Получение сеанса ID: {}", id);
         Session session = sessionService.getSessionById(id);
-        log.info("Сеанс с ID {} успешно получен", id);
+        log.info("Сеанс ID {} получен", id);
         return session;
     }
 
     /**
+     * POST /api/sessions
      * Создать новый сеанс.
      */
     @PostMapping
     public Session create(@Valid @RequestBody SessionDto dto) {
-        log.info("Создание сеанса: фильм ID {}, зал ID {}, время {}",
+        log.info("Создание сеанса: фильм {}, зал {}, время {}",
                 dto.movieId(), dto.hallId(), dto.startTime());
         Session saved = sessionService.createSession(dto);
-        log.info("Сеанс успешно создан с ID {}", saved.getId());
+        log.info("Сеанс создан с ID {}", saved.getId());
         return saved;
+    }
+
+    /**
+     * GET /api/sessions/by-date
+     * Получить сеансы на указанную дату (параметр date в формате YYYY-MM-DD).
+     */
+    @GetMapping("/by-date")
+    public List<Session> getSessionsByDate(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        log.info("Получение сеансов на дату: {}", date);
+        List<Session> sessions = sessionService.getSessionsByDate(date);
+        log.info("Сеансы на {} получены. Количество: {}", date, sessions.size());
+        return sessions;
+    }
+
+    /**
+     * DELETE /api/sessions/{id}
+     * Удалить сеанс (только если нет броней).
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteSession(@PathVariable Long id) {
+        log.info("Удаление сеанса с ID: {}", id);
+        sessionService.deleteSession(id);
+        log.info("Сеанс с ID {} успешно удалён", id);
+        return ResponseEntity.noContent().build();
     }
 }

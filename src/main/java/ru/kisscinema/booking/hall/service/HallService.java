@@ -3,13 +3,12 @@ package ru.kisscinema.booking.hall.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.kisscinema.booking.hall.dto.HallDto;
-import ru.kisscinema.booking.hall.dto.RowDto;
-import ru.kisscinema.booking.hall.dto.AddSeatsDto;
+import ru.kisscinema.booking.hall.dto.*;
 import ru.kisscinema.booking.hall.model.Hall;
 import ru.kisscinema.booking.hall.model.Row;
 import ru.kisscinema.booking.hall.model.Seat;
 import ru.kisscinema.booking.hall.repository.*;
+import ru.kisscinema.booking.session.repository.SessionRepository;
 
 import java.util.List;
 import java.util.stream.IntStream;
@@ -18,20 +17,21 @@ import java.util.stream.IntStream;
 @RequiredArgsConstructor
 public class HallService {
 
-    private final HallRepository hallRepo;
-    private final RowRepository rowRepo;
-    private final SeatRepository seatRepo;
+    private final HallRepository hallRepository;
+    private final RowRepository rowRepository;
+    private final SeatRepository seatRepository;
+    private final SessionRepository sessionRepository;
 
     @Transactional(readOnly = true)
     public List<HallDto> getAllHalls() {
-        return hallRepo.findAll().stream()
+        return hallRepository.findAll().stream()
                 .map(h -> new HallDto(h.getId(), h.getName(), h.getDescription()))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public HallDto getHallById(Long id) {
-        Hall hall = hallRepo.findById(id)
+        Hall hall = hallRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Hall not found"));
         return new HallDto(hall.getId(), hall.getName(), hall.getDescription());
     }
@@ -41,33 +41,33 @@ public class HallService {
         Hall hall = new Hall();
         hall.setName(dto.name());
         hall.setDescription(dto.description());
-        Hall saved = hallRepo.save(hall);
+        Hall saved = hallRepository.save(hall);
         return new HallDto(saved.getId(), saved.getName(), saved.getDescription());
     }
 
     @Transactional(readOnly = true)
     public List<Row> getRowsByHallId(Long hallId) {
-        return rowRepo.findByHallIdOrderByRowNumberAsc(hallId);
+        return rowRepository.findByHallIdOrderByRowNumberAsc(hallId);
     }
 
     @Transactional
     public Row addRow(Long hallId, RowDto dto) {
-        Hall hall = hallRepo.findById(hallId)
+        Hall hall = hallRepository.findById(hallId)
                 .orElseThrow(() -> new RuntimeException("Hall not found"));
         Row row = new Row();
         row.setHall(hall);
         row.setRowNumber(dto.rowNumber());
-        return rowRepo.save(row);
+        return rowRepository.save(row);
     }
 
     @Transactional(readOnly = true)
     public List<Seat> getSeatsByRowId(Long rowId) {
-        return seatRepo.findByRowIdOrderBySeatNumberAsc(rowId);
+        return seatRepository.findByRowIdOrderBySeatNumberAsc(rowId);
     }
 
     @Transactional
     public List<Seat> addSeats(Long rowId, AddSeatsDto dto) {
-        Row row = rowRepo.findById(rowId)
+        Row row = rowRepository.findById(rowId)
                 .orElseThrow(() -> new RuntimeException("Row not found"));
         List<Seat> seats = IntStream.rangeClosed(1, dto.count())
                 .mapToObj(num -> {
@@ -77,6 +77,14 @@ public class HallService {
                     return seat;
                 })
                 .toList();
-        return seatRepo.saveAll(seats);
+        return seatRepository.saveAll(seats);
+    }
+
+    @Transactional
+    public void deleteHall(Long id) {
+        if (sessionRepository.existsByHallId(id)) {
+            throw new RuntimeException("Невозможно удалить зал: существуют сеансы в этом зале");
+        }
+        hallRepository.deleteById(id);
     }
 }
