@@ -6,6 +6,7 @@ import ru.kisscinema.booking.common.BaseAuditableEntity;
 import ru.kisscinema.booking.session.model.Session;
 import ru.kisscinema.booking.hall.model.Seat;
 
+//Бронирование кино
 @Entity
 @Table(name = "booking", uniqueConstraints = {
         @UniqueConstraint(columnNames = {"seat_id", "session_id"}),

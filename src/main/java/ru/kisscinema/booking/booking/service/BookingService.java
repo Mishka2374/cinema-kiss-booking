@@ -3,6 +3,8 @@ package ru.kisscinema.booking.booking.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.kisscinema.booking.audit.service.AuditService;
+import ru.kisscinema.booking.audit.util.AuditAuthor;
 import ru.kisscinema.booking.booking.dto.BookingRequestDto;
 import ru.kisscinema.booking.booking.dto.BookingResponse;
 import ru.kisscinema.booking.booking.model.Booking;
@@ -25,6 +27,7 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final SessionRepository sessionRepository;
     private final SeatRepository seatRepository;
+    private final AuditService auditService;
 
     @Transactional
     public BookingResponse createBooking(BookingRequestDto dto) {
@@ -45,6 +48,11 @@ public class BookingService {
         booking.setStatus(BookingStatus.RESERVED);
         bookingRepository.save(booking);
 
+        String details = String.format("Бронь создана. Код: %s, сеанс ID: %d, место ID: %d",
+                code, dto.sessionId(), dto.seatId());
+
+        auditService.log("Booking", booking.getId(), "CREATE", AuditAuthor.USER, details);
+
         return new BookingResponse(
                 code,
                 session.getMovie().getTitle(),
@@ -60,7 +68,8 @@ public class BookingService {
         Session session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new RuntimeException("Сеанс не найден"));
 
-        List<Long> bookedSeatIds = bookingRepository.findSeatIdsBySessionId(sessionId);
+        List<Long> bookedSeatIds = bookingRepository.findReservedSeatIdsBySessionId(sessionId);
+
         List<Seat> allSeats = seatRepository.findByRowHallId(session.getHall().getId());
 
         return allSeats.stream()
@@ -79,5 +88,23 @@ public class BookingService {
                 .orElseThrow(() -> new RuntimeException("Бронь не найдена"));
         booking.setStatus(BookingStatus.USED);
         bookingRepository.save(booking);
+
+        auditService.log("Booking", booking.getId(), "UPDATE", AuditAuthor.USER,
+                "Бронь подтверждена на кассе. Код: " + bookingCode);
+    }
+
+    @Transactional
+    public void cancelBooking(Long id) {
+        Booking booking = bookingRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Бронь не найдена"));
+
+        if (booking.getStatus() != BookingStatus.RESERVED) {
+            throw new RuntimeException("Нельзя отменить бронь: статус не RESERVED");
+        }
+
+        booking.setStatus(BookingStatus.CANCELLED);
+        bookingRepository.save(booking);
+
+        auditService.log("Booking", id, "UPDATE", AuditAuthor.USER, "Бронь отменена");
     }
 }

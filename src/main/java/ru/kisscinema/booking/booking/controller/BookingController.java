@@ -54,4 +54,15 @@ public class BookingController {
         bookingService.useBooking(bookingCode);
         log.info("Бронь с кодом {} успешно подтверждена на кассе", bookingCode);
     }
+
+    /**
+     * POST /api/bookings/{id}/cancel
+     * Отменить бронь (только если статус RESERVED).
+     */
+    @PostMapping("/{id}/cancel")
+    public void cancelBooking(@PathVariable Long id) {
+        log.info("Отмена брони с ID: {}", id);
+        bookingService.cancelBooking(id);
+        log.info("Бронь с ID {} успешно отменена", id);
+    }
 }

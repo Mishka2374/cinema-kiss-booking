@@ -1,6 +1,7 @@
 package ru.kisscinema.booking.booking.model;
 
 public enum BookingStatus {
-    RESERVED,  // забронировано
-    USED       // использовано (на кассе)
+    RESERVED,   // активная бронь
+    USED,       // подтверждена на кассе
+    CANCELLED   // отменена пользователем
 }

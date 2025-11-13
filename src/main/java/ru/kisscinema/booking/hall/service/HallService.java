@@ -3,6 +3,8 @@ package ru.kisscinema.booking.hall.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.kisscinema.booking.audit.service.AuditService;
+import ru.kisscinema.booking.audit.util.AuditAuthor;
 import ru.kisscinema.booking.hall.dto.*;
 import ru.kisscinema.booking.hall.model.Hall;
 import ru.kisscinema.booking.hall.model.Row;
@@ -21,6 +23,7 @@ public class HallService {
     private final RowRepository rowRepository;
     private final SeatRepository seatRepository;
     private final SessionRepository sessionRepository;
+    private final AuditService auditService;
 
     @Transactional(readOnly = true)
     public List<HallDto> getAllHalls() {
@@ -42,6 +45,10 @@ public class HallService {
         hall.setName(dto.name());
         hall.setDescription(dto.description());
         Hall saved = hallRepository.save(hall);
+
+        auditService.log("Hall", saved.getId(), "CREATE", AuditAuthor.ADMIN,
+                "Создан зал: " + saved.getName());
+
         return new HallDto(saved.getId(), saved.getName(), saved.getDescription());
     }
 
@@ -57,7 +64,12 @@ public class HallService {
         Row row = new Row();
         row.setHall(hall);
         row.setRowNumber(dto.rowNumber());
-        return rowRepository.save(row);
+
+        Row saved = rowRepository.save(row);
+        auditService.log("Row", saved.getId(), "CREATE", AuditAuthor.ADMIN,
+                "Добавлен ряд " + dto.rowNumber() + " в зал ID " + hallId);
+
+        return saved;
     }
 
     @Transactional(readOnly = true)
@@ -77,7 +89,13 @@ public class HallService {
                     return seat;
                 })
                 .toList();
-        return seatRepository.saveAll(seats);
+
+        List<Seat> saved = seatRepository.saveAll(seats);
+
+        auditService.log("Seat", saved.get(0).getId(), "CREATE", AuditAuthor.ADMIN,
+                "Добавлено " + dto.count() + " мест в ряд ID " + rowId);
+
+        return saved;
     }
 
     @Transactional
@@ -86,5 +104,17 @@ public class HallService {
             throw new RuntimeException("Невозможно удалить зал: существуют сеансы в этом зале");
         }
         hallRepository.deleteById(id);
+
+        auditService.log("Hall", id, "DELETE", AuditAuthor.ADMIN, "Зал удалён");
+    }
+
+    @Transactional
+    public void deleteRow(Long rowId) {
+        if (rowRepository.existsBookingsByRowId(rowId)) {
+            throw new RuntimeException("Невозможно удалить ряд: есть брони на места в этом ряду");
+        }
+        rowRepository.deleteById(rowId);
+
+        auditService.log("Row", rowId, "DELETE", AuditAuthor.ADMIN, "Ряд удалён");
     }
 }

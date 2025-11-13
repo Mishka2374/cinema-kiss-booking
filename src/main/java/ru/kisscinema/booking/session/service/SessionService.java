@@ -3,6 +3,8 @@ package ru.kisscinema.booking.session.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.kisscinema.booking.audit.service.AuditService;
+import ru.kisscinema.booking.audit.util.AuditAuthor;
 import ru.kisscinema.booking.booking.repository.BookingRepository;
 import ru.kisscinema.booking.movie.repository.MovieRepository;
 import ru.kisscinema.booking.hall.repository.HallRepository;
@@ -24,6 +26,7 @@ public class SessionService {
     private final MovieRepository movieRepository;
     private final HallRepository hallRepository;
     private final BookingRepository bookingRepository;
+    private final AuditService auditService;
 
     @Transactional(readOnly = true)
     public List<Session> getAllSessions(Long movieId) {
@@ -57,7 +60,13 @@ public class SessionService {
         session.setStartTime(start);
         session.setEndTime(end);
         session.setPrice(dto.price());
-        return sessionRepository.save(session);
+
+        Session saved = sessionRepository.save(session);
+        auditService.log("Session", saved.getId(), "CREATE", AuditAuthor.ADMIN,
+                String.format("Создан сеанс: фильм ID %d, зал ID %d, время %s",
+                        dto.movieId(), dto.hallId(), dto.startTime()));
+
+        return saved;
     }
 
     @Transactional(readOnly = true)
@@ -73,5 +82,7 @@ public class SessionService {
             throw new RuntimeException("Невозможно удалить сеанс: существуют брони на этот сеанс");
         }
         sessionRepository.deleteById(id);
+
+        auditService.log("Session", id, "DELETE", AuditAuthor.ADMIN, "Сеанс удалён");
     }
 }

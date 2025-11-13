@@ -119,4 +119,16 @@ public class HallController {
         log.info("Кинозал с ID {} успешно удалён", id);
         return ResponseEntity.noContent().build();
     }
+
+    /**
+     * DELETE /api/rows/{id}
+     * Удалить ряд (только если нет броней на его места).
+     */
+    @DeleteMapping("/rows/{id}")
+    public ResponseEntity<Void> deleteRow(@PathVariable Long id) {
+        log.info("Удаление ряда с ID: {}", id);
+        hallService.deleteRow(id);
+        log.info("Ряд с ID {} успешно удалён", id);
+        return ResponseEntity.noContent().build();
+    }
 }

@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import ru.kisscinema.booking.common.BaseAuditableEntity;
 
+//Кинозал
 @Entity
 @Table(name = "hall")
 @Getter

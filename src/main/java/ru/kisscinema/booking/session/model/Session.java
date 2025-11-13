@@ -9,6 +9,7 @@ import ru.kisscinema.booking.hall.model.Hall;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+//Сеансы
 @Entity
 @Table(name = "session")
 @Getter

@@ -3,6 +3,8 @@ package ru.kisscinema.booking.movie.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.kisscinema.booking.audit.service.AuditService;
+import ru.kisscinema.booking.audit.util.AuditAuthor;
 import ru.kisscinema.booking.movie.dto.MovieDto;
 import ru.kisscinema.booking.movie.model.Movie;
 import ru.kisscinema.booking.movie.repository.MovieRepository;
@@ -16,6 +18,7 @@ public class MovieService {
 
     private final MovieRepository movieRepository;
     private final SessionRepository sessionRepository;
+    private final AuditService auditService;
 
     @Transactional(readOnly = true)
     public List<MovieDto> getAllMovies() {
@@ -38,6 +41,10 @@ public class MovieService {
         movie.setDurationMinutes(dto.durationMinutes());
         movie.setDescription(dto.description());
         Movie saved = movieRepository.save(movie);
+
+        auditService.log("Movie", saved.getId(), "CREATE", AuditAuthor.ADMIN,
+                "Добавлен фильм: " + saved.getTitle());
+
         return new MovieDto(saved.getId(), saved.getTitle(), saved.getDurationMinutes(), saved.getDescription());
     }
 
@@ -47,5 +54,7 @@ public class MovieService {
             throw new RuntimeException("Невозможно удалить фильм: существуют сеансы с этим фильмом");
         }
         movieRepository.deleteById(id);
+
+        auditService.log("Movie", id, "DELETE", AuditAuthor.ADMIN, "Фильм удалён");
     }
 }
