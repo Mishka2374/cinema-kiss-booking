@@ -1,5 +1,7 @@
 #Этот файл содержит пример команд для создания кинозала с фильмом и бронированием места
-# !!! если программа запускается без тг бота, то убрать папку bot или закомитить
+# !!! Если программа запускается без тг бота, то убрать папку bot или закомитить
+# перед запуском убедиться что создан образ docker compose и надо пересобрать проект: mvn clean compile
+
 #Запуск докера
 docker compose up -d
 
@@ -36,6 +38,9 @@ gramUserId=12345"  -H "Content-Type: application/json" \
 #-------
 # Экспорт таблиц
  curl -X POST http://localhost:8080/api/admin/export
+
+#Импорт таблиц (пример)
+curl -X POST http://localhost:8080/api/admin/import?filename=cinema_export_2025-11-25_16-38-01.json
 
 # Выключить докер
 docker compose down

@@ -1,0 +1,27 @@
+{
+  "halls" : [ {
+    "name" : "Основной зал",
+    "description" : null
+  } ],
+  "movies" : [ {
+    "title" : "Интерстеллар",
+    "durationMinutes" : 169,
+    "description" : null
+  } ],
+  "sessions" : [ {
+    "movieTitle" : "Интерстеллар",
+    "hallName" : "Основной зал",
+    "startTime" : [ 2025, 11, 25, 19, 0 ],
+    "price" : 500.00
+  } ],
+  "bookings" : [ {
+    "bookingCode" : "BK-EBDC4438",
+    "movieTitle" : "Интерстеллар",
+    "hallName" : "Основной зал",
+    "sessionTime" : [ 2025, 11, 25, 19, 0 ],
+    "rowNumber" : 1,
+    "seatNumber" : 1,
+    "status" : "RESERVED",
+    "telegramUserId" : 12345
+  } ]
+}
