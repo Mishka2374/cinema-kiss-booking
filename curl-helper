@@ -1,0 +1,41 @@
+#Этот файл содержит пример команд для создания кинозала с фильмом и бронированием места
+# !!! если программа запускается без тг бота, то убрать папку bot или закомитить
+#Запуск докера
+docker compose up -d
+
+# Создание кинозала
+curl -X POST http://localhost:8080/api/halls \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Основной зал"}'
+
+# Создание фильма
+curl -X POST http://localhost:8080/api/movies
+  -H "Content-Type: application/json" \
+  -d '{"title":"Интерстеллар","durationMinutes":169}'
+
+# Создание ряда в кинозале (по его айди)
+curl -X POST http://localhost:8080/api/halls/5/rows
+ -H "Content-Type: application/json" \
+ -d '{"hallId":1,"rowNumber":1}'
+
+# Заполнение ряда местами (по айди ряда)
+curl -X POST http://localhost:8080/api/halls/rows/6/seats \
+  -H "Content-Type: application/json" \
+  -d '{"count":3}'
+
+# Создание сеанса
+TODAY=$(date +%Y-%m-%d)
+curl -X POST http://localhost:8080/api/sessions -H "Content-Type: application/json" \
+  -d "{\"movieId\":5,\"hallId\":5,\"startTime\":\"$TODAY""T19:00\",\"price\":500}"
+
+# Бронирование сеанса
+curl -X POST "http://localhost:8080/api/bookings?tele
+gramUserId=12345"  -H "Content-Type: application/json" \
+  -d '{"sessionId":3,"seatId":13}'
+
+#-------
+# Экспорт таблиц
+ curl -X POST http://localhost:8080/api/admin/export
+
+# Выключить докер
+docker compose down

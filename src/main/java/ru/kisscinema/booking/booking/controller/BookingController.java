@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
 import ru.kisscinema.booking.booking.dto.*;
 import ru.kisscinema.booking.booking.service.BookingService;
-import ru.kisscinema.booking.hall.dto.SeatDto;
+import ru.kisscinema.booking.hall.dto.SeatDtoFull;
 
 import java.util.List;
 
@@ -24,23 +24,36 @@ public class BookingController {
      * Забронировать место — возвращает код, фильм, время, цену, ряд и место.
      */
     @PostMapping
-    public BookingResponse createBooking(@Valid @RequestBody BookingRequestDto dto) {
-        log.info("Бронирование места: сеанс ID {}, место ID {}", dto.sessionId(), dto.seatId());
-        BookingResponse response = bookingService.createBooking(dto);
+    public BookingResponse createBooking(
+            @Valid @RequestBody BookingRequestDto dto,
+            @RequestParam(required = false) Long telegramUserId) {
+
+        log.info("Бронирование места: сеанс ID {}, место ID {}, пользователь {}",
+                dto.sessionId(), dto.seatId(), telegramUserId);
+
+        BookingResponse response = bookingService.createBooking(dto, telegramUserId);
+
         log.info("Место успешно забронировано. Код: {}, фильм: {}, ряд: {}, место: {}",
                 response.bookingCode(), response.movieTitle(), response.rowNumber(), response.seatNumber());
+
         return response;
     }
 
     /**
-     * GET /api/bookings/sessions/{sessionId}/available-seats
-     * Получить список свободных мест для сеанса (с номером ряда и места).
+     * GET /api/bookings/sessions/{sessionId}/seats
+     * Получить список мест для сеанса с полной информацией (занятость, принадлежность пользователю).
      */
-    @GetMapping("/sessions/{sessionId}/available-seats")
-    public List<SeatDto> getAvailableSeats(@PathVariable Long sessionId) {
-        log.info("Получение свободных мест для сеанса ID: {}", sessionId);
-        List<SeatDto> seats = bookingService.getAvailableSeats(sessionId);
-        log.info("Свободные места для сеанса ID {} получены. Количество: {}", sessionId, seats.size());
+    @GetMapping("/sessions/{sessionId}/seats")
+    public List<SeatDtoFull> getSeatsFull(
+            @PathVariable Long sessionId,
+            @RequestParam(required = false) Long telegramUserId) {
+
+        log.info("Получение мест для сеанса ID: {} пользователя {}", sessionId, telegramUserId);
+
+        List<SeatDtoFull> seats = bookingService.getSeatsFull(sessionId, telegramUserId);
+
+        log.info("Места для сеанса ID {} получены. Всего мест: {}", sessionId, seats.size());
+
         return seats;
     }
 

@@ -10,15 +10,15 @@ import ru.kisscinema.booking.booking.dto.BookingResponse;
 import ru.kisscinema.booking.booking.model.Booking;
 import ru.kisscinema.booking.booking.model.BookingStatus;
 import ru.kisscinema.booking.booking.repository.BookingRepository;
+import ru.kisscinema.booking.hall.dto.SeatDtoFull;
 import ru.kisscinema.booking.session.repository.SessionRepository;
 import ru.kisscinema.booking.hall.repository.SeatRepository;
-import ru.kisscinema.booking.hall.dto.SeatDto;
 import ru.kisscinema.booking.session.model.Session;
 import ru.kisscinema.booking.hall.model.Seat;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -30,31 +30,82 @@ public class BookingService {
     private final AuditService auditService;
 
     @Transactional
-    public BookingResponse createBooking(BookingRequestDto dto) {
+    public BookingResponse createBooking(BookingRequestDto dto, Long telegramUserId) {
+
         Session session = sessionRepository.findById(dto.sessionId())
                 .orElseThrow(() -> new RuntimeException("Сеанс не найден"));
+
         Seat seat = seatRepository.findById(dto.seatId())
                 .orElseThrow(() -> new RuntimeException("Место не найдено"));
 
-        if (bookingRepository.existsBySessionIdAndSeatId(dto.sessionId(), dto.seatId())) {
-            throw new RuntimeException("Место уже забронировано");
+        Optional<Booking> existing = bookingRepository
+                .findBySessionIdAndSeatId(dto.sessionId(), dto.seatId());
+
+        // Если бронь существует
+        if (existing.isPresent()) {
+            Booking b = existing.get();
+
+            if (b.getStatus() == BookingStatus.RESERVED) {
+                throw new RuntimeException("Место уже забронировано");
+            }
+
+            if (b.getStatus() == BookingStatus.USED) {
+                throw new RuntimeException("Билет уже использован, место нельзя забронировать");
+            }
+
+            if (b.getStatus() == BookingStatus.CANCELLED) {
+
+                b.setStatus(BookingStatus.RESERVED);
+                b.setUserTelegramId(telegramUserId); // может быть null
+                b.setBookingCode("BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+
+                bookingRepository.save(b);
+
+                auditService.log(
+                        "Booking",
+                        b.getId(),
+                        "UPDATE",
+                        telegramUserId == null ? "SYSTEM" : AuditAuthor.USER,
+                        "Бронь восстановлена. Код: " + b.getBookingCode()
+                                + ", сеанс: " + session.getId()
+                                + ", место: " + seat.getRow().getRowNumber() + "-" + seat.getSeatNumber()
+                                + (telegramUserId == null ? "" : ", пользователь: " + telegramUserId)
+                );
+
+                return new BookingResponse(
+                        b.getBookingCode(),
+                        session.getMovie().getTitle(),
+                        session.getStartTime(),
+                        session.getPrice(),
+                        seat.getRow().getRowNumber(),
+                        seat.getSeatNumber()
+                );
+            }
         }
 
-        String code = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        // Создаём новую бронь
         Booking booking = new Booking();
         booking.setSession(session);
         booking.setSeat(seat);
-        booking.setBookingCode(code);
+        booking.setUserTelegramId(telegramUserId); // может быть null
+        booking.setBookingCode("BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
         booking.setStatus(BookingStatus.RESERVED);
+
         bookingRepository.save(booking);
 
-        String details = String.format("Бронь создана. Код: %s, сеанс ID: %d, место ID: %d",
-                code, dto.sessionId(), dto.seatId());
-
-        auditService.log("Booking", booking.getId(), "CREATE", AuditAuthor.USER, details);
+        auditService.log(
+                "Booking",
+                booking.getId(),
+                "CREATE",
+                telegramUserId == null ? "SYSTEM" : AuditAuthor.USER,
+                "Создана бронь. Код: " + booking.getBookingCode()
+                        + ", сеанс: " + session.getId()
+                        + ", место: " + seat.getRow().getRowNumber() + "-" + seat.getSeatNumber()
+                        + (telegramUserId == null ? "" : ", пользователь: " + telegramUserId)
+        );
 
         return new BookingResponse(
-                code,
+                booking.getBookingCode(),
                 session.getMovie().getTitle(),
                 session.getStartTime(),
                 session.getPrice(),
@@ -64,23 +115,43 @@ public class BookingService {
     }
 
     @Transactional(readOnly = true)
-    public List<SeatDto> getAvailableSeats(Long sessionId) {
+    public List<SeatDtoFull> getSeatsFull(Long sessionId, Long userChatId) {
         Session session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new RuntimeException("Сеанс не найден"));
 
-        List<Long> bookedSeatIds = bookingRepository.findReservedSeatIdsBySessionId(sessionId);
-
+        // все места зала
         List<Seat> allSeats = seatRepository.findByRowHallId(session.getHall().getId());
 
         return allSeats.stream()
-                .filter(seat -> !bookedSeatIds.contains(seat.getId()))
-                .map(seat -> new SeatDto(
-                        seat.getId(),
-                        seat.getRow().getRowNumber(),
-                        seat.getSeatNumber()
-                ))
-                .collect(Collectors.toList());
+                .map(seat -> {
+
+                    Optional<Booking> bookingOpt =
+                            bookingRepository.findBySessionIdAndSeatId(sessionId, seat.getId());
+
+                    boolean taken = false;
+                    boolean mine = false;
+                    boolean used = false;
+
+                    if (bookingOpt.isPresent()) {
+                        Booking b = bookingOpt.get();
+                        taken = (b.getStatus() == BookingStatus.RESERVED || b.getStatus() == BookingStatus.USED);
+                        mine = (b.getUserTelegramId() != null && b.getUserTelegramId().equals(userChatId));
+                        used = (b.getStatus() == BookingStatus.USED);
+                    }
+
+                    return new SeatDtoFull(
+                            seat.getId(),
+                            seat.getRow().getRowNumber(),
+                            seat.getSeatNumber(),
+                            taken,
+                            mine,
+                            used
+                    );
+                })
+                .toList();
     }
+
+
 
     @Transactional
     public void useBooking(String bookingCode) {
@@ -92,6 +163,21 @@ public class BookingService {
         auditService.log("Booking", booking.getId(), "UPDATE", AuditAuthor.USER,
                 "Бронь подтверждена на кассе. Код: " + bookingCode);
     }
+
+    @Transactional
+    public Long getSeatId(Long sessionId, int rowNumber, int seatNumber) {
+        Session session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new RuntimeException("Сеанс не найден"));
+
+        Long hallId = session.getHall().getId();
+
+        return seatRepository
+                .findByRowHallIdAndRowRowNumberAndSeatNumber(hallId, rowNumber, seatNumber)
+                .map(Seat::getId)
+                .orElseThrow(() -> new RuntimeException(
+                        "Место " + rowNumber + "-" + seatNumber + " не найдено в зале"));
+    }
+
 
     @Transactional
     public void cancelBooking(Long id) {
@@ -106,5 +192,24 @@ public class BookingService {
         bookingRepository.save(booking);
 
         auditService.log("Booking", id, "UPDATE", AuditAuthor.USER, "Бронь отменена");
+    }
+
+    @Transactional
+    public void cancelBookingByUser(Long sessionId, int rowNumber, int seatNumber, Long chatId) {
+        // Получаем ID места по ряду и номеру места
+        Long seatId = getSeatId(sessionId, rowNumber, seatNumber);
+
+        // Находим бронь, привязанную к этому сеансу, месту и пользователю
+        Booking booking = bookingRepository.findBySessionIdAndSeatIdAndUserTelegramId(sessionId, seatId, chatId)
+                .orElseThrow(() -> new RuntimeException("Бронь не найдена для этого пользователя"));
+
+        if (booking.getStatus() != BookingStatus.RESERVED) {
+            throw new RuntimeException("Нельзя отменить бронь: статус не RESERVED");
+        }
+
+        booking.setStatus(BookingStatus.CANCELLED);
+        bookingRepository.save(booking);
+
+        auditService.log("Booking", booking.getId(), "UPDATE", AuditAuthor.USER, "Бронь отменена пользователем");
     }
 }

@@ -1,0 +1,15 @@
+# .properties для запуска бота при наличии Postgres
+spring.datasource.url=jdbc:postgresql://localhost:5433/cinema_db
+spring.datasource.username=postgres
+spring.datasource.password=root
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect
+
+bot.name=JavaSpringCashierBot
+bot.token=
+
+server.port=8080

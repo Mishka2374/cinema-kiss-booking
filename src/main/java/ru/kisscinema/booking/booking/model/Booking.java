@@ -30,4 +30,8 @@ public class Booking extends BaseAuditableEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private BookingStatus status = BookingStatus.RESERVED;
+
+    // 🟦 ДОБАВЛЯЕМ!
+    @Column(name = "tg_user_id")
+    private Long userTelegramId;
 }

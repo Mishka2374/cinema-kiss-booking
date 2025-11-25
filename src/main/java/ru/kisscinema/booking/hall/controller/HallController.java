@@ -97,7 +97,7 @@ public class HallController {
     }
 
     /**
-     * POST /api/rows/{rowId}/seats
+     * POST /api/halls/rows/{rowId}/seats
      * Добавить указанное количество мест в ряд.
      */
     @PostMapping("/rows/{rowId}/seats")
