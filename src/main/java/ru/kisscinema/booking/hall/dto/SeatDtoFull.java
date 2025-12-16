@@ -6,5 +6,6 @@ public record SeatDtoFull(
         Integer seatNumber,
         boolean taken,
         boolean mine,
-        boolean used
+        boolean used,
+        java.math.BigDecimal price
 ) {}

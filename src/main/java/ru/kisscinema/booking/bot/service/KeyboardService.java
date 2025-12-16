@@ -6,6 +6,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import ru.kisscinema.booking.session.model.Session;
 import ru.kisscinema.booking.hall.dto.SeatDtoFull;
 
+import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -54,7 +55,6 @@ public class KeyboardService {
     }
 
     // ===================== МЕСТА ========================
-
     public InlineKeyboardMarkup getSeatsKeyboard(
             Long sessionId,
             List<SeatDtoFull> seats,
@@ -73,54 +73,131 @@ public class KeyboardService {
                 .max()
                 .orElse(0);
 
-        // строим сетку мест
-        grouped.keySet().stream().sorted().forEach(rowNum -> {
+        // Находим общее количество рядов и делаем ее final
+        final int totalRows = Math.max(grouped.size(), 1);
 
+        // Создаем заголовок (первая строка)
+        List<InlineKeyboardButton> headerRow = new ArrayList<>();
+
+        // Одна кнопка заголовка для информации о ряде
+        InlineKeyboardButton headerInfoBtn = new InlineKeyboardButton();
+        headerInfoBtn.setText("Ряд | Тип | Цена");
+        headerInfoBtn.setCallbackData("ignore");
+        headerRow.add(headerInfoBtn);
+
+        // Номера мест в заголовке
+        for (int seatNum = 1; seatNum <= maxSeatNumber; seatNum++) {
+            InlineKeyboardButton seatNumBtn = new InlineKeyboardButton();
+            seatNumBtn.setText("М" + seatNum);
+            seatNumBtn.setCallbackData("ignore");
+            headerRow.add(seatNumBtn);
+        }
+        rows.add(headerRow);
+
+        // Строим сетку мест с объединенной информацией о рядах
+        grouped.keySet().stream().sorted().forEach(rowNum -> {
+            List<InlineKeyboardButton> line = new ArrayList<>();
+
+            // Определяем тип ряда
+            String rowType = getRowType(rowNum, totalRows);
+            String rowTypeEmoji = getRowTypeEmoji(rowType);
+
+            // Получаем цену для этого ряда
+            BigDecimal rowPrice = grouped.get(rowNum).stream()
+                    .findFirst()
+                    .map(SeatDtoFull::price)
+                    .orElse(BigDecimal.ZERO);
+            String formattedPrice = rowPrice.stripTrailingZeros().toPlainString() + "₽";
+
+            // Единая кнопка с информацией о ряде
+            InlineKeyboardButton rowInfoBtn = new InlineKeyboardButton();
+            rowInfoBtn.setText(rowTypeEmoji + " " + rowNum + " | " + rowType + " | " + formattedPrice);
+            rowInfoBtn.setCallbackData("ignore");
+            line.add(rowInfoBtn);
+
+            // Получаем места текущего ряда
             Map<Integer, SeatDtoFull> seatMap = grouped.get(rowNum).stream()
                     .collect(Collectors.toMap(
                             SeatDtoFull::seatNumber,
                             s -> s
                     ));
 
-            List<InlineKeyboardButton> line = new ArrayList<>();
-
+            // Добавляем кнопки мест
             for (int seatNum = 1; seatNum <= maxSeatNumber; seatNum++) {
-                InlineKeyboardButton b = new InlineKeyboardButton();
-
+                InlineKeyboardButton seatBtn = new InlineKeyboardButton();
                 SeatDtoFull seat = seatMap.get(seatNum);
 
                 if (seat == null) {
-                    // если seat отсутствует в БД — рисуем пустую клетку
-                    b.setText(" ");
-                    b.setCallbackData("ignore");
-                }
-                else if (!seat.taken()) {
+                    // если место отсутствует в БД — рисуем пустую клетку
+                    seatBtn.setText("⬜");
+                    seatBtn.setCallbackData("ignore");
+                } else if (!seat.taken()) {
                     // свободное место
-                    b.setText(rowNum + "-" + seatNum);
-                    b.setCallbackData(
+                    seatBtn.setText("🟩" + seatNum);
+                    seatBtn.setCallbackData(
                             "seat_" + sessionId + "_" + rowNum + "_" + seatNum + "_" + dayIndex
                     );
                 } else if (seat.used()) {
                     // место уже использовано на кассе
-                    b.setText("🟩");
-                    b.setCallbackData("ignore");
-
+                    seatBtn.setText("🟫");
+                    seatBtn.setCallbackData("ignore");
                 } else if (seat.mine()) {
-                    b.setText("🟦");
-                    b.setCallbackData(
+                    // мое забронированное место
+                    seatBtn.setText("🔵" + seatNum);
+                    seatBtn.setCallbackData(
                             "myseat_" + sessionId + "_" + rowNum + "_" + seatNum + "_" + dayIndex
                     );
-
                 } else {
-                    b.setText("❌");
-                    b.setCallbackData("ignore");
+                    // занятое другим пользователем место
+                    seatBtn.setText("🟥");
+                    seatBtn.setCallbackData("ignore");
                 }
 
-                line.add(b);
+                line.add(seatBtn);
             }
 
             rows.add(line);
         });
+
+        // Добавляем информацию о типах рядов и ценах
+        List<InlineKeyboardButton> infoRow = new ArrayList<>();
+        InlineKeyboardButton infoBtn = new InlineKeyboardButton();
+
+        // Получаем информацию о ценах для каждого типа
+        String frontPrice = "?";
+        String middlePrice = "?";
+        String backPrice = "?";
+
+        // Ищем цены для каждого типа рядов
+        for (Integer rowNum : grouped.keySet()) {
+            String type = getRowType(rowNum, totalRows);
+            String price = grouped.get(rowNum).stream()
+                    .findFirst()
+                    .map(seat -> seat.price().stripTrailingZeros().toPlainString())
+                    .orElse("?");
+
+            switch (type) {
+                case "Не до поцелуя" -> frontPrice = price;
+                case "Идеал" -> middlePrice = price;
+                case "Поцел" -> backPrice = price;
+            }
+        }
+
+        infoBtn.setText(
+                "🚫💋 Не до поцелуя: " + frontPrice + "₽ | " +
+                        "🌟 Идеальное: " + middlePrice + "₽ | " +
+                        "💋 Для поцелуев: " + backPrice + "₽");
+        infoBtn.setCallbackData("ignore");
+        infoRow.add(infoBtn);
+        rows.add(infoRow);
+
+        // Добавляем легенду
+        List<InlineKeyboardButton> legendRow = new ArrayList<>();
+        InlineKeyboardButton legendBtn = new InlineKeyboardButton();
+        legendBtn.setText("🟩 Свободно | 🔵 Ваше | 🟥 Занято | 🟫 Касса");
+        legendBtn.setCallbackData("ignore");
+        legendRow.add(legendBtn);
+        rows.add(legendRow);
 
         // назад к сеансам
         rows.add(
@@ -130,6 +207,31 @@ public class KeyboardService {
         );
 
         return markup(rows);
+    }
+
+    // Вспомогательный метод для определения типа ряда
+    private String getRowType(int rowNumber, int totalRows) {
+        if (totalRows <= 1) {
+            return "Стандарт";
+        }
+
+        if (rowNumber <= 1) { // Первый ряд
+            return "Не до поцелуя";
+        } else if (rowNumber >= totalRows) { // Последний ряд
+            return "Поцел";
+        } else {
+            return "Идеал";
+        }
+    }
+
+    // Вспомогательный метод для получения эмодзи типа ряда
+    private String getRowTypeEmoji(String rowType) {
+        return switch (rowType) {
+            case "Не до поцелуя" -> "\uD83D\uDEAB\uD83D\uDC8B";
+            case "Идеал" -> "\uD83C\uDF1F";
+            case "Поцел" -> "\uD83D\uDC8B";
+            default -> "🎬";
+        };
     }
 
     // ===================== ПОДТВЕРЖДЕНИЕ отмены ========================

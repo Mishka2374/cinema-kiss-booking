@@ -16,6 +16,7 @@ import ru.kisscinema.booking.hall.repository.SeatRepository;
 import ru.kisscinema.booking.session.model.Session;
 import ru.kisscinema.booking.hall.model.Seat;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -31,7 +32,6 @@ public class BookingService {
 
     @Transactional
     public BookingResponse createBooking(BookingRequestDto dto, Long telegramUserId) {
-
         Session session = sessionRepository.findById(dto.sessionId())
                 .orElseThrow(() -> new RuntimeException("Сеанс не найден"));
 
@@ -41,7 +41,21 @@ public class BookingService {
         Optional<Booking> existing = bookingRepository
                 .findBySessionIdAndSeatId(dto.sessionId(), dto.seatId());
 
-        // Если бронь существует
+        // вычисляем totalRows через seatRepository, т.к. у Hall нет getRows()
+        Long hallId = session.getHall().getId();
+        List<Seat> hallSeats = seatRepository.findByRowHallId(hallId);
+        int totalRows = (int) hallSeats.stream()
+                .map(s -> s.getRow().getRowNumber())
+                .distinct()
+                .count();
+
+        // Защита: если почему-то нет рядов — считаем 1
+        if (totalRows <= 0) totalRows = 1;
+
+        int rowNumber = seat.getRow().getRowNumber();
+        BigDecimal finalPrice = session.getPrice().multiply(getRowCoefficient(rowNumber, totalRows));
+
+        // Если бронь уже существует
         if (existing.isPresent()) {
             Booking b = existing.get();
 
@@ -59,6 +73,7 @@ public class BookingService {
                 b.setUserTelegramId(telegramUserId); // может быть null
                 b.setBookingCode("BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
 
+                // Если у тебя есть поле price в Booking — можно сохранить, но т.к. setPrice отсутствует, пропускаем.
                 bookingRepository.save(b);
 
                 auditService.log(
@@ -68,7 +83,7 @@ public class BookingService {
                         telegramUserId == null ? "SYSTEM" : AuditAuthor.USER,
                         "Бронь восстановлена. Код: " + b.getBookingCode()
                                 + ", сеанс: " + session.getId()
-                                + ", место: " + seat.getRow().getRowNumber() + "-" + seat.getSeatNumber()
+                                + ", место: " + rowNumber + "-" + seat.getSeatNumber()
                                 + (telegramUserId == null ? "" : ", пользователь: " + telegramUserId)
                 );
 
@@ -76,8 +91,8 @@ public class BookingService {
                         b.getBookingCode(),
                         session.getMovie().getTitle(),
                         session.getStartTime(),
-                        session.getPrice(),
-                        seat.getRow().getRowNumber(),
+                        finalPrice,
+                        rowNumber,
                         seat.getSeatNumber()
                 );
             }
@@ -100,7 +115,7 @@ public class BookingService {
                 telegramUserId == null ? "SYSTEM" : AuditAuthor.USER,
                 "Создана бронь. Код: " + booking.getBookingCode()
                         + ", сеанс: " + session.getId()
-                        + ", место: " + seat.getRow().getRowNumber() + "-" + seat.getSeatNumber()
+                        + ", место: " + rowNumber + "-" + seat.getSeatNumber()
                         + (telegramUserId == null ? "" : ", пользователь: " + telegramUserId)
         );
 
@@ -108,8 +123,8 @@ public class BookingService {
                 booking.getBookingCode(),
                 session.getMovie().getTitle(),
                 session.getStartTime(),
-                session.getPrice(),
-                seat.getRow().getRowNumber(),
+                finalPrice,
+                rowNumber,
                 seat.getSeatNumber()
         );
     }
@@ -119,11 +134,19 @@ public class BookingService {
         Session session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new RuntimeException("Сеанс не найден"));
 
-        // все места зала
-        List<Seat> allSeats = seatRepository.findByRowHallId(session.getHall().getId());
+        Long hallId = session.getHall().getId();
 
-        return allSeats.stream()
-                .map(seat -> {
+        // Все места зала
+        List<Seat> allSeats = seatRepository.findByRowHallId(hallId);
+
+        int rowsCount = (int) allSeats.stream()
+                .map(s -> s.getRow().getRowNumber())
+                .distinct()
+                .count();
+
+        int totalRows = rowsCount <= 0 ? 1 : rowsCount; // НЕ изменяем rowsCount — он final
+
+        return allSeats.stream().map(seat -> {
 
                     Optional<Booking> bookingOpt =
                             bookingRepository.findBySessionIdAndSeatId(sessionId, seat.getId());
@@ -139,18 +162,43 @@ public class BookingService {
                         used = (b.getStatus() == BookingStatus.USED);
                     }
 
-                    return new SeatDtoFull(
-                            seat.getId(),
-                            seat.getRow().getRowNumber(),
-                            seat.getSeatNumber(),
-                            taken,
-                            mine,
-                            used
-                    );
-                })
-                .toList();
+            int row = seat.getRow().getRowNumber();
+            BigDecimal finalPrice = session.getPrice().multiply(getRowCoefficient(row, totalRows));
+
+            return new SeatDtoFull(
+                    seat.getId(),
+                    row,
+                    seat.getSeatNumber(),
+                    taken,
+                    mine,
+                    used,
+                    finalPrice
+            );
+
+        }).toList();
     }
 
+    @Transactional
+    public BigDecimal getRowCoefficient(int row, int totalRows) {
+        if (totalRows <= 1) {
+            // маленькие залы, цена не корректируем
+            return BigDecimal.valueOf(1.0);
+        }
+
+        // Настройки: какие ряды считаются передними и задними
+        int frontLimit = 1;               // передний 1 ряд
+
+        if (row <= frontLimit) {
+            return BigDecimal.valueOf(0.5); // передние — немного дешевле
+        }
+
+        if (row >= totalRows) { // последние 1 ряд
+            return BigDecimal.valueOf(1.00); // задние — базовая цена
+        }
+
+        // средние ряды — лучшие, увеличиваем цену
+        return BigDecimal.valueOf(2.00);
+    }
 
 
     @Transactional

@@ -22,7 +22,9 @@ import ru.kisscinema.booking.booking.dto.BookingRequestDto;
 import ru.kisscinema.booking.booking.dto.BookingResponse;
 
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
@@ -32,6 +34,9 @@ public class TelegramBot extends TelegramLongPollingBot {
     private final KeyboardService keyboardService;
     private final SessionService sessionService;
     private final BookingService bookingService;
+
+    // Хранит состояние ожидания кода брони у пользователя
+    private final Map<Long, Boolean> awaitingBookingCode = new HashMap<>();
 
     // ===================== START =======================
 
@@ -65,7 +70,10 @@ public class TelegramBot extends TelegramLongPollingBot {
         try {
             this.execute(
                     new SetMyCommands(
-                            List.of(new BotCommand("/start", "Запуск бота")),
+                            List.of(
+                                    new BotCommand("/start", "Запуск бота"),
+                                    new BotCommand("/activate", "Активировать бронь")
+                            ),
                             new BotCommandScopeDefault(),
                             null
                     )
@@ -79,13 +87,30 @@ public class TelegramBot extends TelegramLongPollingBot {
         long chatId = update.getMessage().getChatId();
         String text = update.getMessage().getText();
 
-        if (text.equals("/start")) {
-            send(chatId,
+        // Если ожидаем код брони от пользователя
+        if (awaitingBookingCode.getOrDefault(chatId, false)) {
+            try {
+                bookingService.useBooking(text); // вызываем метод активации
+                send(chatId, "✔️ Бронь активирована!", null);
+            } catch (RuntimeException e) {
+                send(chatId, "❌ Ошибка: " + e.getMessage(), null);
+            } finally {
+                awaitingBookingCode.remove(chatId); // снимаем ожидание
+            }
+            return;
+        }
+
+        // Обработка команд
+        switch (text) {
+            case "/start" -> send(chatId,
                     "🎬 Добро пожаловать!\n\nВыберите день:",
                     keyboardService.getDaySelectionKeyboard()
             );
-        } else {
-            send(chatId, "Неизвестная команда", null);
+            case "/activate" -> {
+                send(chatId, "Введите код брони для активации:", null);
+                awaitingBookingCode.put(chatId, true);
+            }
+            default -> send(chatId, "Неизвестная команда", null);
         }
     }
 
@@ -178,7 +203,7 @@ public class TelegramBot extends TelegramLongPollingBot {
     private void showSeats(long chatId, long msgId, Long sessionId, int dayIndex) {
 
         List<SeatDtoFull> seats =
-                bookingService.getSeatsFull(sessionId, chatId); // ты добавил этот метод
+                bookingService.getSeatsFull(sessionId, chatId);
 
         if (seats.isEmpty()) {
             edit(chatId, msgId, "❌ Места не найдены", null);
@@ -196,7 +221,7 @@ public class TelegramBot extends TelegramLongPollingBot {
     private void bookSeat(long chatId, long msgId, Long sessionId, int row, int seat) {
 
         try {
-            Long seatId = bookingService.getSeatId(sessionId, row, seat); // метод нужно добавить
+            Long seatId = bookingService.getSeatId(sessionId, row, seat);
             BookingResponse response = bookingService
                     .createBooking(new BookingRequestDto(sessionId, seatId), chatId);
 
@@ -258,7 +283,6 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         showSeats(chatId, msgId, sessionId, dayIndex);
     }
-
 
     // ===================== SEND & EDIT =======================
 
